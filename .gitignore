@@ -1,2 +1,5 @@
 .DS_Store
-.#*
+.#
+*mist
+mist.exe
+test.conf

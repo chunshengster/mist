@@ -1,13 +1,28 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
+	"html/template"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"net/http/httputil"
 	"os"
 	"strings"
 )
+
+var errorTemplate *template.Template = template.Must(template.New("error").Parse(`
+	<html>
+		<head>
+			<title>Mist Error</title>
+		</head>
+		<body>
+			<h1>Error while proxying request.</h1>
+			<p>{{.}}</p>
+		</body>
+	</html>	
+`))
 
 type HostProxy struct {
 	mappings map[string]string
@@ -42,13 +57,19 @@ func (h *HostProxy) findForwardAddressForHost(host string) string {
 	return ""
 }
 
-func getErrorResponse(req *http.Request, status string, code int) *http.Response {
+func getErrorResponse(req *http.Request, status string, code int, data interface{}) *http.Response {
+
+	var buf bytes.Buffer
+	errorTemplate.Execute(&buf, data)
+
 	return &http.Response{
-		Status:     status,
-		StatusCode: code,
-		Proto:      req.Proto,
-		ProtoMajor: req.ProtoMajor,
-		ProtoMinor: req.ProtoMinor,
+		Status:        status,
+		StatusCode:    200,
+		Proto:         req.Proto,
+		ProtoMajor:    req.ProtoMajor,
+		ProtoMinor:    req.ProtoMinor,
+		Body:          ioutil.NopCloser(&buf),
+		ContentLength: -1,
 	}
 }
 
@@ -62,20 +83,21 @@ func (h *HostProxy) connectionHandler(serverConn *httputil.ServerConn) {
 
 		address := h.findForwardAddressForHost(req.Host)
 		if address == "" {
-			serverConn.Write(req, getErrorResponse(req, "503 Service Unavailable", 503))
+			serverConn.Write(req, getErrorResponse(req, "404 Not Found", 404, "Not Found"))
 			return
 		}
 
 		conn, err := net.Dial("tcp", address)
 		if err != nil {
-			serverConn.Write(req, getErrorResponse(req, "503 Service Unavailable", 503))
+			serverConn.Write(req, getErrorResponse(req, "503 Service Unavailable", 503, err))
 			return
 		}
 		defer conn.Close()
+
 		clientConn := httputil.NewClientConn(conn, nil)
 		err = clientConn.Write(req)
 		if err != nil {
-			serverConn.Write(req, getErrorResponse(req, "503 Service Unavailable", 503))
+			serverConn.Write(req, getErrorResponse(req, "503 Service Unavailable", 503, err))
 			return
 		}
 
