@@ -64,7 +64,7 @@ func getErrorResponse(req *http.Request, status string, code int, data interface
 
 	return &http.Response{
 		Status:        status,
-		StatusCode:    200,
+		StatusCode:    code,
 		Proto:         req.Proto,
 		ProtoMajor:    req.ProtoMajor,
 		ProtoMinor:    req.ProtoMinor,
